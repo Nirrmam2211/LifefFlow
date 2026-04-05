@@ -204,12 +204,24 @@ def get_dashboard_stats():
 @app.route('/api/register', methods=['POST'])
 def register_donor():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Request body must be valid JSON"}), 400
+
         required_fields = ['first_name', 'last_name', 'email', 'blood_group']
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
+        missing_fields = [
+            field for field in required_fields
+            if field not in data or not str(data[field]).strip()
+        ]
+        if missing_fields:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
         if 'date_of_birth' in data and data['date_of_birth']:
-            data['date_of_birth'] = datetime.fromisoformat(data['date_of_birth'].replace('Z', '+00:00'))
+            try:
+                data['date_of_birth'] = datetime.fromisoformat(
+                    data['date_of_birth'].replace('Z', '+00:00')
+                )
+            except ValueError:
+                return jsonify({"error": "date_of_birth must be a valid ISO 8601 date"}), 400
         
         # Simple auto-increment for donor_id
         last_donor = donors_collection.find_one(sort=[("donor_id", -1)])
