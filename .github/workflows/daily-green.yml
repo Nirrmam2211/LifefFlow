@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+env:
+  GIT_AUTHOR_NAME: Nirrmam2211
+  GIT_AUTHOR_EMAIL: Nirmamdshah@gmail.com
+  GIT_COMMITTER_NAME: Nirrmam2211
+  GIT_COMMITTER_EMAIL: Nirmamdshah@gmail.com
+
 jobs:
   keep-contributions-active:
     runs-on: ubuntu-latest
@@ -25,8 +31,9 @@ jobs:
 
       - name: Commit and push changes
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "$GIT_AUTHOR_NAME"
+          git config user.email "$GIT_AUTHOR_EMAIL"
           git add .github/commit-activity/daily-log.txt
-          git commit -m "chore: daily contribution update" || exit 0
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: daily contribution update"
           git push
