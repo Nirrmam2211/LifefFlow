@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">Register a New Donor</h1>
+
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-2xl mx-auto">
+        <form action="{{ url_for('add_donor') }}" method="POST">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Donor Name -->
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                    <input type="text" name="name" id="name" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                </div>
+
+                <!-- Age -->
+                <div>
+                    <label for="age" class="block text-sm font-medium text-gray-700">Age</label>
+                    <input type="number" name="age" id="age" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                </div>
+
+                <!-- Gender -->
+                <div>
+                    <label for="gender" class="block text-sm font-medium text-gray-700">Gender</label>
+                    <select id="gender" name="gender" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                        <option value="M">Male</option>
+                        <option value="F">Female</option>
+                        <option value="O">Other</option>
+                    </select>
+                </div>
+
+                <!-- Blood Group -->
+                <div>
+                    <label for="blood_group" class="block text-sm font-medium text-gray-700">Blood Group</label>
+                    <select id="blood_group" name="blood_group" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                        <option>A+</option>
+                        <option>A-</option>
+                        <option>B+</option>
+                        <option>B-</option>
+                        <option>AB+</option>
+                        <option>AB-</option>
+                        <option>O+</option>
+                        <option>O-</option>
+                    </select>
+                </div>
+
+                <!-- Contact -->
+                <div>
+                    <label for="contact" class="block text-sm font-medium text-gray-700">Contact Number</label>
+                    <input type="tel" name="contact" id="contact" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                </div>
+
+                <!-- Email -->
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                    <input type="email" name="email" id="email" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                </div>
+
+                <!-- Address -->
+                <div class="md:col-span-2">
+                    <label for="address" class="block text-sm font-medium text-gray-700">Full Address</label>
+                    <textarea name="address" id="address" rows="3" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"></textarea>
+                </div>
+
+                <!-- Last Donation Date -->
+                <div>
+                    <label for="last_donation_date" class="block text-sm font-medium text-gray-700">Last Donation Date (Optional)</label>
+                    <input type="date" name="last_donation_date" id="last_donation_date" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                </div>
+
+                 <!-- Eligibility Status -->
+                <div>
+                    <label for="eligibility_status" class="block text-sm font-medium text-gray-700">Eligibility Status</label>
+                     <select id="eligibility_status" name="eligibility_status" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm">
+                        <option>Eligible</option>
+                        <option>Not Eligible</option>
+                        <option>Deferred</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="mt-8 flex justify-end">
+                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-200 ease-in-out">
+                    Register Donor
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

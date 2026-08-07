@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeFlow - Blood Donation Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .heart-icon {
+            animation: heartbeat 2s ease-in-out infinite;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body class="{% block body_class %}bg-gray-50{% endblock %}">
+    <div class="flex flex-col min-h-screen bg-gray-100">
+        <!-- Top Navigation -->
+        <header class="bg-white shadow">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16 items-center">
+                    <div class="flex items-center space-x-6">
+                        <div class="flex items-center text-red-700 font-bold text-xl">
+                            <svg class="w-6 h-6 mr-2 heart-icon" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path>
+                            </svg>
+                            LifeFlow
+                        </div>
+                        {% if session.get('user') %}
+                        <nav class="hidden sm:flex sm:space-x-4">
+                            {% set user_role = session.get('role') %}
+                            {% if user_role == 'admin' or user_role == 'staff' %}
+                                <a href="{{ url_for('dashboard') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                                <a href="{{ url_for('donors') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">Donors</a>
+                                <a href="{{ url_for('recipients') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">Recipients</a>
+                                <a href="{{ url_for('stock') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">Stock</a>
+                                <a href="{{ url_for('reports_page') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">Reports</a>
+                            {% else %}
+                                <a href="{{ url_for('user_dashboard') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                                <a href="{{ url_for('user_profile') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">My Profile</a>
+                                <a href="{{ url_for('user_donations') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">My Donations</a>
+                                <a href="{{ url_for('request_blood') }}" class="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium">Request Blood</a>
+                            {% endif %}
+                        </nav>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        {% if session.get('user') %}
+                            <a href="{{ url_for('profile') }}" class="text-gray-700 hover:text-red-600">{{ session.get('user', 'Guest') }}</a>
+                            <a href="{{ url_for('logout') }}" class="text-gray-700 hover:text-red-600">Logout</a>
+                        {% else %}
+                            <a href="{{ url_for('login') }}" class="text-gray-700 hover:text-red-600">Login</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <div class="flex-1 overflow-x-hidden overflow-y-auto">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="m-4">
+                        {% for category, message in messages %}
+                            <div class="p-4 rounded-md {% if category == 'danger' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}" role="alert">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+</body>
+</html>
+

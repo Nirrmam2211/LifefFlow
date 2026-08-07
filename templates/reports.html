@@ -1,0 +1,67 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="p-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">Reports</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Monthly Reports</h2>
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-sm text-gray-600">
+                        <th class="p-2">Year</th>
+                        <th class="p-2">Month</th>
+                        <th class="p-2">Total Donations</th>
+                        <th class="p-2">Total Quantity</th>
+                        <th class="p-2">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in monthly_reports %}
+                    <tr class="border-t">
+                        <td class="p-2">{{ r.year }}</td>
+                        <td class="p-2">{{ r.month }}</td>
+                        <td class="p-2">{{ r.total_donations }}</td>
+                        <td class="p-2">{{ r.total_quantity }}</td>
+                        <td class="p-2">
+                            <a href="{{ url_for('download_monthly_report', year=r.year, month=r.month) }}" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">Download TXT</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td class="p-2" colspan="5">No monthly reports generated yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Yearly Reports</h2>
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-sm text-gray-600">
+                        <th class="p-2">Year</th>
+                        <th class="p-2">Total Donations</th>
+                        <th class="p-2">Total Quantity</th>
+                        <th class="p-2">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for y in yearly_reports %}
+                    <tr class="border-t">
+                        <td class="p-2">{{ y.year }}</td>
+                        <td class="p-2">{{ y.total_donations }}</td>
+                        <td class="p-2">{{ y.total_quantity }}</td>
+                        <td class="p-2">
+                            <a href="{{ url_for('download_yearly_report', year=y.year) }}" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">Download TXT</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td class="p-2" colspan="4">No yearly reports generated yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

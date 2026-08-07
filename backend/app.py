@@ -1,0 +1,569 @@
+import os
+from datetime import timedelta, date
+from flask import Flask, jsonify, render_template, request, redirect, url_for, flash, session, make_response
+import mysql.connector
+from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# --- App Initialization ---
+app = Flask(__name__, template_folder='../templates', static_folder='../static')
+
+# --- Configuration ---
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-super-secret-key')
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-super-secret-jwt-key')
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
+
+# --- Database Configuration ---
+# Reads from environment variables (see .env / .env.example). Falls back to local defaults.
+DB_HOST = os.environ.get('DB_HOST', 'localhost')
+DB_USER = os.environ.get('DB_USER', 'root')
+DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
+DB_NAME = os.environ.get('DB_NAME', 'blood_donation')
+
+def get_db_connection():
+    """Establishes a connection to the MySQL database."""
+    try:
+        conn = mysql.connector.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME
+        )
+        return conn
+    except mysql.connector.Error as err:
+        print(f"DATABASE CONNECTION ERROR: {err}")
+        return None
+
+# --- Helper Functions ---
+def query_db(query, args=(), one=False):
+    """Executes a database query."""
+    conn = get_db_connection()
+    if conn is None: return None
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(query, args)
+        # For SELECT queries, fetch results
+        if query.strip().upper().startswith(('SELECT', 'SHOW', 'DESC')):
+            results = cursor.fetchall()
+            return (results[0] if results else None) if one else results
+        # For INSERT, UPDATE, DELETE, commit changes
+        else:
+            conn.commit()
+            return cursor.lastrowid
+    except mysql.connector.Error as err:
+        print(f"DATABASE QUERY ERROR: {err}")
+        conn.rollback() # Roll back in case of error
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+
+# --- Authentication Routes ---
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        role = request.form.get('role', 'user')
+        
+        user_exists = query_db('SELECT * FROM User WHERE username = %s', [username], one=True)
+        if user_exists:
+            flash('Username already exists.', 'danger')
+            return redirect(url_for('register'))
+
+        hashed_password = generate_password_hash(password)
+        query_db('INSERT INTO User (username, password_hash, role, created_at, donor_id) VALUES (%s, %s, %s, %s, NULL)',
+                 (username, hashed_password, role, date.today()))
+
+        flash('Registration successful! Please log in.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = query_db('SELECT * FROM User WHERE username = %s', [username], one=True)
+
+        if user and check_password_hash(user['password_hash'], password):
+            session.permanent = True
+            session['user'] = user['username']
+            session['role'] = user['role']
+            flash('Logged in successfully!', 'success')
+
+            if user['role'] in ['admin', 'staff']:
+                return redirect(url_for('dashboard'))
+            else:
+                return redirect(url_for('user_dashboard'))
+        else:
+            flash('Invalid username or password.', 'danger')
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
+
+# --- Admin/Staff Dashboard ---
+@app.route('/')
+@app.route('/dashboard')
+def dashboard():
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return redirect(url_for('login'))
+    return render_template('dashboard.html')
+
+# --- User Dashboard ---
+@app.route('/user/dashboard')
+def user_dashboard():
+    if 'user' not in session or session.get('role') != 'user':
+        return redirect(url_for('login'))
+    return render_template('user_dashboard.html')
+
+# --- API Routes for Admin Dashboard ---
+@app.route('/api/dashboard/stats')
+def dashboard_stats():
+    if 'user' not in session: return jsonify({'error': 'Unauthorized'}), 401
+    total_donors = query_db('SELECT COUNT(*) as count FROM Donor', one=True)['count']
+    total_recipients = query_db('SELECT COUNT(*) as count FROM Recipient', one=True)['count']
+    units_available = query_db('SELECT SUM(quantity) as count FROM Blood_Stock', one=True)['count'] or 0
+    return jsonify({'total_donors': total_donors, 'total_recipients': total_recipients, 'units_available': units_available})
+
+@app.route('/api/reports/monthly/<int:year>/<int:month>')
+def get_monthly_report(year, month):
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    # Generate the report first
+    query_db('CALL generate_monthly_report(%s, %s)', (year, month))
+    
+    # Get the report data
+    report = query_db('SELECT * FROM Monthly_Donation_Report WHERE year = %s AND month = %s', 
+                     (year, month), one=True)
+    
+    if not report:
+        return jsonify({'error': 'No data found for the specified period'}), 404
+        
+    # Format for text file
+    text_content = f"""Monthly Donation Report
+Year: {report['year']}
+Month: {report['month']}
+Total Donations: {report['total_donations']}
+Total Quantity: {report['total_quantity']}
+Generated on: {report['created_at']}
+"""
+    return jsonify({'content': text_content})
+
+@app.route('/api/reports/yearly/<int:year>')
+def get_yearly_report(year):
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    # Generate the report first
+    query_db('CALL generate_yearly_report(%s)', [year])
+    
+    # Get the report data
+    report = query_db('SELECT * FROM Yearly_Donation_Report WHERE year = %s', [year], one=True)
+    
+    if not report:
+        return jsonify({'error': 'No data found for the specified year'}), 404
+        
+    # Format for text file
+    text_content = f"""Yearly Donation Report
+Year: {report['year']}
+Total Donations: {report['total_donations']}
+Total Quantity: {report['total_quantity']}
+Generated on: {report['created_at']}
+"""
+    return jsonify({'content': text_content})
+
+@app.route('/api/dashboard/blood_stock')
+def blood_stock_data():
+    if 'user' not in session: return jsonify({'error': 'Unauthorized'}), 401
+    stock = query_db("SELECT blood_group, SUM(quantity) as total_units FROM Blood_Stock GROUP BY blood_group")
+    return jsonify(stock)
+
+
+@app.route('/reports')
+def reports_page():
+    # Admin/staff only
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return redirect(url_for('login'))
+
+    monthly = query_db('SELECT * FROM Monthly_Donation_Report ORDER BY year DESC, month DESC') or []
+    yearly = query_db('SELECT * FROM Yearly_Donation_Report ORDER BY year DESC') or []
+    return render_template('reports.html', monthly_reports=monthly, yearly_reports=yearly)
+
+
+@app.route('/reports/download/monthly/<int:year>/<int:month>')
+def download_monthly_report(year, month):
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return redirect(url_for('login'))
+
+    # Ensure report exists / is generated
+    query_db('CALL generate_monthly_report(%s, %s)', (year, month))
+    report = query_db('SELECT * FROM Monthly_Donation_Report WHERE year = %s AND month = %s', (year, month), one=True)
+    if not report:
+        flash('No report available for the selected month.', 'danger')
+        return redirect(url_for('reports_page'))
+
+    text_content = f"""Monthly Donation Report
+Year: {report['year']}
+Month: {report['month']}
+Total Donations: {report['total_donations']}
+Total Quantity: {report['total_quantity']}
+Generated on: {report['created_at']}
+"""
+    resp = make_response(text_content)
+    resp.headers['Content-Type'] = 'text/plain; charset=utf-8'
+    filename = f"monthly_report_{report['year']}_{report['month']:02d}.txt"
+    resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return resp
+
+
+@app.route('/reports/download/yearly/<int:year>')
+def download_yearly_report(year):
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return redirect(url_for('login'))
+
+    query_db('CALL generate_yearly_report(%s)', [year])
+    report = query_db('SELECT * FROM Yearly_Donation_Report WHERE year = %s', [year], one=True)
+    if not report:
+        flash('No report available for the selected year.', 'danger')
+        return redirect(url_for('reports_page'))
+
+    text_content = f"""Yearly Donation Report
+Year: {report['year']}
+Total Donations: {report['total_donations']}
+Total Quantity: {report['total_quantity']}
+Generated on: {report['created_at']}
+"""
+    resp = make_response(text_content)
+    resp.headers['Content-Type'] = 'text/plain; charset=utf-8'
+    filename = f"yearly_report_{report['year']}.txt"
+    resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return resp
+
+
+# --- Management Pages (Admin/Staff) ---
+@app.route('/donors')
+def donors():
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return redirect(url_for('login'))
+    donor_list = query_db("SELECT * FROM Donor ORDER BY name")
+    return render_template('donors.html', donors=donor_list)
+
+@app.route('/donors/edit/<int:donor_id>', methods=['GET', 'POST'])
+def edit_donor(donor_id):
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        flash('You do not have permission to edit donors.', 'danger')
+        return redirect(url_for('login'))
+    
+    # Get the donor information first
+    donor = query_db("SELECT * FROM Donor WHERE donor_id = %s", [donor_id], one=True)
+    if not donor:
+        flash('Donor not found.', 'danger')
+        return redirect(url_for('donors'))
+        
+    if request.method == 'POST':
+        try:
+            # Get form data
+            name = request.form.get('name')
+            age = request.form.get('age')
+            gender = request.form.get('gender')
+            blood_group = request.form.get('blood_group')
+            contact = request.form.get('contact')
+            email = request.form.get('email')
+            address = request.form.get('address')
+            last_donation_date = request.form.get('last_donation_date') or None
+            eligibility_status = request.form.get('eligibility_status')
+            
+            # Validate required fields
+            if not all([name, age, gender, blood_group, contact, email, address, eligibility_status]):
+                flash('All fields except last donation date are required.', 'danger')
+                return redirect(url_for('edit_donor', donor_id=donor_id))
+            
+            # Check if email exists for other donors
+            existing_donor = query_db("SELECT * FROM Donor WHERE email = %s AND donor_id != %s", 
+                                    [email, donor_id], one=True)
+            if existing_donor:
+                flash('A donor with this email address already exists.', 'danger')
+                return redirect(url_for('edit_donor', donor_id=donor_id))
+                
+            # Update donor information
+            query_db("""UPDATE Donor SET 
+                       name = %s, age = %s, gender = %s, blood_group = %s, 
+                       contact = %s, address = %s, email = %s, 
+                       last_donation_date = %s, eligibility_status = %s 
+                       WHERE donor_id = %s""",
+                    (name, age, gender, blood_group, contact, address, 
+                     email, last_donation_date, eligibility_status, donor_id))
+            
+            flash('Donor information updated successfully!', 'success')
+            return redirect(url_for('donors'))
+            
+        except Exception as e:
+            flash(f'An error occurred while updating donor information: {str(e)}', 'danger')
+            return redirect(url_for('edit_donor', donor_id=donor_id))
+    
+    donor = query_db("SELECT * FROM Donor WHERE donor_id = %s", [donor_id], one=True)
+    if not donor:
+        flash('Donor not found.', 'danger')
+        return redirect(url_for('donors'))
+        
+    return render_template('edit_donor.html', donor=donor)
+
+@app.route('/donors/add', methods=['GET', 'POST'])
+def add_donor():
+    if 'user' not in session:
+        flash('Please log in to register as a donor.', 'danger')
+        return redirect(url_for('login'))
+    
+    # Check if user is already registered as a donor
+    user = query_db("SELECT donor_id FROM User WHERE username = %s", [session.get('user')], one=True)
+    if user and user.get('donor_id'):
+        return redirect(url_for('user_profile'))
+    
+    if request.method == 'POST':
+        try:
+            email = request.form.get('email')
+            name = request.form.get('name')
+            age = request.form.get('age')
+            gender = request.form.get('gender')
+            blood_group = request.form.get('blood_group')
+            contact = request.form.get('contact')
+            address = request.form.get('address')
+            last_donation_date = request.form.get('last_donation_date') or None
+            
+            if not all([email, name, age, gender, blood_group, contact, address]):
+                flash('All fields except last donation date are required.', 'danger')
+                return redirect(url_for('add_donor'))
+            
+            # Check if email already exists
+            existing_donor = query_db("SELECT * FROM Donor WHERE email = %s", [email], one=True)
+            if existing_donor:
+                flash('A donor with this email address already exists.', 'danger')
+                return redirect(url_for('add_donor'))
+            
+            # Insert new donor
+            donor_id = query_db("""INSERT INTO Donor 
+                                  (name, age, gender, blood_group, contact, email, address, last_donation_date, eligibility_status) 
+                                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Eligible')""",
+                              (name, age, gender, blood_group, contact, email, address, last_donation_date))
+            
+            # Link donor to user
+            query_db("UPDATE User SET donor_id = %s WHERE username = %s", (donor_id, session.get('user')))
+            
+            flash('Donor registration successful!', 'success')
+            return redirect(url_for('user_profile'))
+            
+        except Exception as e:
+            flash(f'An error occurred while registering as a donor: {str(e)}', 'danger')
+            return redirect(url_for('add_donor'))
+    
+    return render_template('add_donor.html')
+
+@app.route('/donors/delete/<int:donor_id>', methods=['POST'])
+def delete_donor_route(donor_id):
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        flash('You do not have permission to delete donors.', 'danger')
+        return redirect(url_for('login'))
+
+    try:
+        # Delete related records from the Donation table
+        query_db("DELETE FROM Donation WHERE donor_id = %s", [donor_id])
+
+        # Delete related records from the User table
+        query_db("UPDATE User SET donor_id = NULL WHERE donor_id = %s", [donor_id]) # Set to NULL instead of deleting user
+
+        # Delete the donor record
+        query_db("DELETE FROM Donor WHERE donor_id = %s", [donor_id])
+
+        flash('Donor and associated records deleted successfully!', 'success')
+    except Exception as e:
+        flash(f'An error occurred while deleting donor: {str(e)}', 'danger')
+    
+    return redirect(url_for('donors'))
+
+@app.route('/recipients')
+def recipients():
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return redirect(url_for('login'))
+    recipient_list = query_db("SELECT * FROM Recipient ORDER BY name")
+    return render_template('recipients.html', recipients=recipient_list)
+
+@app.route('/stock')
+def stock():
+    if 'user' not in session or session.get('role') not in ['admin', 'staff']:
+        return redirect(url_for('login'))
+    stock_list = query_db("SELECT bs.*, bb.name as bank_name FROM Blood_Stock bs LEFT JOIN Blood_Bank bb ON bs.bank_id = bb.bank_id")
+    return render_template('stock.html', stock=stock_list)
+
+# --- Blood Request Management ---
+@app.route('/request-blood', methods=['GET', 'POST'])
+def request_blood():
+    if 'user' not in session:
+        flash('Please log in to request blood.', 'danger')
+        return redirect(url_for('login'))
+        
+    if request.method == 'POST':
+        try:
+            blood_group = request.form.get('blood_group')
+            units_needed = request.form.get('units_needed')
+            hospital = request.form.get('hospital')
+            urgency = request.form.get('urgency')
+            contact = request.form.get('contact')
+            
+            if not all([blood_group, units_needed, hospital, urgency, contact]):
+                flash('All fields are required.', 'danger')
+                return redirect(url_for('request_blood'))
+                
+            query_db("""INSERT INTO Blood_Request 
+                       (user_id, blood_group, units_needed, hospital, urgency_level, contact_info, status, request_date) 
+                       VALUES ((SELECT user_id FROM User WHERE username = %s), %s, %s, %s, %s, %s, 'Pending', CURDATE())""",
+                    (session['user'], blood_group, units_needed, hospital, urgency, contact))
+                    
+            flash('Blood request submitted successfully! We will contact you soon.', 'success')
+            return redirect(url_for('user_dashboard'))
+            
+        except Exception as e:
+            flash(f'An error occurred while submitting your request: {str(e)}', 'danger')
+            return redirect(url_for('request_blood'))
+            
+    return render_template('request_blood.html')
+
+# --- User-Specific Pages ---
+@app.route('/user/profile', methods=['GET', 'POST'])
+def user_profile():
+    if 'user' not in session:
+        flash('Please log in to access your profile.', 'danger')
+        return redirect(url_for('login'))
+        
+    if session.get('role') != 'user':
+        flash('Access denied. This page is for donors only.', 'danger')
+        return redirect(url_for('login'))
+    
+    # Get user and donor information
+    user = query_db("SELECT user_id, donor_id FROM User WHERE username = %s", [session.get('user')], one=True)
+    if not user:
+        flash('User account not found.', 'danger')
+        return redirect(url_for('login'))
+    
+    donor_info = None
+    if user.get('donor_id'):
+        donor_info = query_db("SELECT * FROM Donor WHERE donor_id = %s", [user['donor_id']], one=True)
+        
+        if request.method == 'POST':
+            try:
+                # Get and validate form data
+                name = request.form.get('name', '').strip()
+                age = request.form.get('age', '')
+                gender = request.form.get('gender', '')
+                blood_group = request.form.get('blood_group', '')
+                contact = request.form.get('contact', '').strip()
+                email = request.form.get('email', '').strip()
+                address = request.form.get('address', '').strip()
+                
+                # Input validation
+                if not name or len(name) < 2:
+                    flash('Please enter a valid name (at least 2 characters).', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                    
+                try:
+                    age = int(age)
+                    if age < 18 or age > 65:
+                        flash('Age must be between 18 and 65 years.', 'danger')
+                        return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                except ValueError:
+                    flash('Please enter a valid age.', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                
+                if gender not in ['M', 'F', 'O']:
+                    flash('Please select a valid gender.', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                    
+                if blood_group not in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']:
+                    flash('Please select a valid blood group.', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                    
+                if not contact or len(contact) < 10:
+                    flash('Please enter a valid contact number.', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                    
+                if not email or '@' not in email:
+                    flash('Please enter a valid email address.', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                    
+                if not address or len(address) < 10:
+                    flash('Please enter a complete address.', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                
+                # Check if email exists for other donors
+                existing_donor = query_db("SELECT * FROM Donor WHERE email = %s AND donor_id != %s", 
+                                       [email, user['donor_id']], one=True)
+                if existing_donor:
+                    flash('This email is already registered with another donor.', 'danger')
+                    return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+                
+                # Update donor information
+                query_db("""UPDATE Donor SET 
+                           name = %s, age = %s, gender = %s, blood_group = %s,
+                           contact = %s, email = %s, address = %s
+                           WHERE donor_id = %s""",
+                        (name, age, gender, blood_group, contact, email, 
+                         address, user['donor_id']))
+                
+                # Refresh donor info after update
+                donor_info = query_db("SELECT * FROM Donor WHERE donor_id = %s", [user['donor_id']], one=True)
+                flash('Your profile has been updated successfully!', 'success')
+                return redirect(url_for('user_profile'))
+                
+            except Exception as e:
+                app.logger.error(f'Error updating donor profile: {str(e)}')
+                flash('An unexpected error occurred. Please try again.', 'danger')
+                return render_template('user_profile.html', donor=donor_info, edit_mode=True)
+    
+    return render_template('user_profile.html', donor=donor_info, edit_mode=request.args.get('edit', False))
+
+@app.route('/user/donations')
+def user_donations():
+    if 'user' not in session or session.get('role') != 'user':
+        return redirect(url_for('login'))
+
+    user = query_db("SELECT donor_id FROM User WHERE username = %s", [session.get('user')], one=True)
+    
+    donations = []
+    if user and user.get('donor_id'):
+        donations = query_db(
+            """SELECT d.donation_id, d.donation_date, d.quantity, bb.name as bank_name
+               FROM Donation d 
+               JOIN Blood_Stock bs ON d.unit_id = bs.unit_id
+               JOIN Blood_Bank bb ON bs.bank_id = bb.bank_id
+               WHERE d.donor_id = %s 
+               ORDER BY d.donation_date DESC""",
+            [user['donor_id']]
+        )
+        
+    return render_template('user_donations.html', donations=donations)
+
+# --- General Profile Page ---
+@app.route('/profile')
+def profile():
+    if 'user' not in session: return redirect(url_for('login'))
+    user_data = query_db("SELECT username, role, created_at FROM User WHERE username = %s", [session.get('user')], one=True)
+    return render_template('profile.html', user=user_data)
+
+
+# --- Main Execution ---
+if __name__ == '__main__':
+    app.run(debug=True)

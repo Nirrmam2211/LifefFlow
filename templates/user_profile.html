@@ -1,0 +1,159 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">My Donor Profile</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="mb-6 p-4 rounded-md {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    {% if donor %}
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-2xl mx-auto">
+        {% if edit_mode %}
+        <form method="POST" class="space-y-6">
+                <div id="error-container" class="space-y-2"></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" name="name" id="name" value="{{ donor.name }}" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
+                </div>
+                
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" name="email" id="email" value="{{ donor.email }}" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
+                </div>
+
+                <div>
+                    <label for="contact" class="block text-sm font-medium text-gray-700">Contact</label>
+                    <input type="tel" name="contact" id="contact" value="{{ donor.contact }}" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
+                </div>
+
+                <div>
+                    <label for="age" class="block text-sm font-medium text-gray-700">Age</label>
+                    <input type="number" name="age" id="age" value="{{ donor.age }}" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
+                </div>
+
+                <div>
+                    <label for="blood_group" class="block text-sm font-medium text-gray-700">Blood Group</label>
+                    <select name="blood_group" id="blood_group" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
+                        {% for bg in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] %}
+                        <option value="{{ bg }}" {% if donor.blood_group == bg %}selected{% endif %}>{{ bg }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="gender" class="block text-sm font-medium text-gray-700">Gender</label>
+                    <select name="gender" id="gender" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
+                        <option value="M" {% if donor.gender == 'M' %}selected{% endif %}>Male</option>
+                        <option value="F" {% if donor.gender == 'F' %}selected{% endif %}>Female</option>
+                        <option value="O" {% if donor.gender == 'O' %}selected{% endif %}>Other</option>
+                    </select>
+                </div>
+
+                <div class="md:col-span-2">
+                    <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+                    <textarea name="address" id="address" rows="3" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">{{ donor.address }}</textarea>
+                </div>
+            </div>
+
+            <div class="mt-8 border-t pt-6 flex justify-end space-x-4">
+                <a href="{{ url_for('user_profile') }}" 
+                   class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-200 ease-in-out">
+                    Cancel
+                </a>
+                <button type="submit"
+                    class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-200 ease-in-out">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+        {% else %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-gray-700">
+            <div>
+                <strong class="font-semibold">Name:</strong>
+                <p>{{ donor.name }}</p>
+            </div>
+            <div>
+                <strong class="font-semibold">Email:</strong>
+                <p>{{ donor.email }}</p>
+            </div>
+            <div>
+                <strong class="font-semibold">Contact:</strong>
+                <p>{{ donor.contact }}</p>
+            </div>
+            <div>
+                <strong class="font-semibold">Age:</strong>
+                <p>{{ donor.age }}</p>
+            </div>
+            <div>
+                <strong class="font-semibold">Blood Group:</strong>
+                <p>{{ donor.blood_group }}</p>
+            </div>
+            <div>
+                <strong class="font-semibold">Gender:</strong>
+                <p>{{ 'Male' if donor.gender == 'M' else 'Female' if donor.gender == 'F' else 'Other' }}</p>
+            </div>
+            <div class="md:col-span-2">
+                <strong class="font-semibold">Address:</strong>
+                <p>{{ donor.address }}</p>
+            </div>
+            <div>
+                <strong class="font-semibold">Last Donation:</strong>
+                <p>{{ donor.last_donation_date.strftime('%Y-%m-%d') if donor.last_donation_date else 'N/A' }}</p>
+            </div>
+            <div>
+                <strong class="font-semibold">Status:</strong>
+                <p class="font-semibold {% if donor.eligibility_status == 'Eligible' %}text-green-600{% else %}text-orange-600{% endif %}">
+                    {{ donor.eligibility_status }}
+                </p>
+            </div>
+        </div>
+        <div class="mt-8 border-t pt-6 flex justify-end">
+            <a href="{{ url_for('user_profile', edit=True) }}" 
+               class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-200 ease-in-out">
+                Edit Profile
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-900 p-6 rounded-lg shadow-md" role="alert">
+        <div class="flex items-start">
+            <div class="flex-shrink-0">
+                <svg class="h-6 w-6 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <div class="ml-3 flex-1">
+                <h3 class="text-lg font-bold mb-2">Not Yet Registered as a Donor</h3>
+                <p class="mb-4">You haven't registered as a blood donor yet. Register now to start saving lives!</p>
+                <a href="{{ url_for('add_donor') }}" class="inline-block bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-200 ease-in-out">
+                    <svg class="inline-block w-5 h-5 mr-2 -mt-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    Register as a Donor
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+        {% if edit_mode %}
+        <script src="{{ url_for('static', filename='js/profile-validation.js') }}"></script>
+        {% endif %}
+</div>
+{% endblock %}

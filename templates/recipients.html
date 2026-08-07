@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+{% block title %}Manage Recipients - LifeFlow{% endblock %}
+{% block header %}Recipient Management{% endblock %}
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md">
+    <h3 class="font-semibold mb-4">All Recipients</h3>
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Blood Group Needed</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registration Date</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {% for recipient in recipients %}
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap">{{ recipient.name }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ recipient.blood_group_needed }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ recipient.contact }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ recipient.registration_date }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="px-6 py-4 text-center text-gray-500">No recipients found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

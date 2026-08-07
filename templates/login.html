@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block title %}Login - LifeFlow{% endblock %}
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gray-50">
+    <div class="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
+        <div class="text-center mb-8">
+             <h1 class="text-3xl font-bold text-red-600"><i class="fas fa-heartbeat mr-2"></i>LifeFlow</h1>
+            <p class="text-gray-600 mt-2">Sign in to your account</p>
+        </div>
+        <form action="{{ url_for('login') }}" method="post">
+            <div class="mb-4">
+                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                <input type="text" id="username" name="username" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
+            </div>
+            <div class="mb-6">
+                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                <input type="password" id="password" name="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" required>
+            </div>
+            <button type="submit" class="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                Sign In
+            </button>
+        </form>
+        <p class="text-center text-sm text-gray-600 mt-6">
+            Don't have an account? <a href="{{ url_for('register') }}" class="font-medium text-red-600 hover:text-red-500">Sign up</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

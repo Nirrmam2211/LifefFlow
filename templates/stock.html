@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block title %}Manage Blood Stock - LifeFlow{% endblock %}
+{% block header %}Blood Stock Management{% endblock %}
+{% block content %}
+<div class="bg-white p-6 rounded-lg shadow-md">
+    <h3 class="font-semibold mb-4">Current Blood Stock</h3>
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Blood Group</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity (Units)</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collection Date</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry Date</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {% for item in stock %}
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap font-bold text-red-600">{{ item.blood_group }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ item.quantity }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ item.collection_date }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ item.expiry_date }}</td>
+                <td class="px-6 py-4 whitespace-nowrap">{{ item.bank_name }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="px-6 py-4 text-center text-gray-500">No stock information available.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
