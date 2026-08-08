@@ -88,6 +88,20 @@ CREATE TABLE User (
     FOREIGN KEY (donor_id) REFERENCES Donor(donor_id)
 );
 
+-- Blood_Request table
+CREATE TABLE Blood_Request (
+    request_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    blood_group VARCHAR(5) NOT NULL,
+    units_needed INT NOT NULL,
+    hospital VARCHAR(255) NOT NULL,
+    urgency_level VARCHAR(50) NOT NULL,
+    contact_info VARCHAR(50) NOT NULL,
+    status VARCHAR(30) DEFAULT 'Pending',
+    request_date DATE,
+    FOREIGN KEY (user_id) REFERENCES User(user_id) ON DELETE CASCADE
+);
+
 -- Create tables for monthly and yearly reports
 USE blood_donation;
 

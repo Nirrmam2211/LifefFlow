@@ -25,10 +25,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error fetching stats:', data.error);
                 return;
             }
-            // Update the dashboard cards with the fetched data
-            document.getElementById('total-donors').textContent = data.total_donors || 0;
-            document.getElementById('total-recipients').textContent = data.total_recipients || 0;
-            document.getElementById('units-available').textContent = data.units_available || 0;
+            // Update the dashboard cards with the fetched data safely
+            const totalDonorsEl = document.getElementById('total-donors');
+            if (totalDonorsEl) totalDonorsEl.textContent = data.total_donors ?? 0;
+            
+            const totalRecipientsEl = document.getElementById('total-recipients');
+            if (totalRecipientsEl) totalRecipientsEl.textContent = data.total_recipients ?? 0;
+            
+            const unitsAvailableEl = document.getElementById('units-available');
+            if (unitsAvailableEl) unitsAvailableEl.textContent = data.units_available ?? 0;
         })
         .catch(error => {
             console.error('Error fetching dashboard stats:', error);
@@ -37,8 +42,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Fetch and render blood stock chart
     function renderBloodStockChart() {
-        const ctx = document.getElementById('bloodStockChart')?.getContext('2d');
-        if (!ctx) return; // Don't run if the canvas element isn't on the page
+        const chartCanvas = document.getElementById('bloodStockChart');
+        if (!chartCanvas) return; // Don't run if the canvas element isn't on the page
+        const ctx = chartCanvas.getContext('2d');
+        if (!ctx) return;
 
         fetch('/api/dashboard/blood_stock')
         .then(response => {
@@ -48,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 throw new Error('Network response was not ok');
             }
-            return response.json()
+            return response.json();
         })
         .then(data => {
             if (data.error) {
@@ -89,9 +96,8 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(error => console.error('Error fetching blood stock data:', error));
     }
     
-    // Only run these functions if we are on a dashboard page.
-    // This prevents errors if the script is loaded on other pages.
-    if (window.location.pathname === '/dashboard' || window.location.pathname === '/' || window.location.pathname === '/user/dashboard') {
+    // Only run these functions if we are on the admin dashboard page.
+    if (document.getElementById('total-donors') || document.getElementById('bloodStockChart')) {
         fetchDashboardStats();
         renderBloodStockChart();
     }

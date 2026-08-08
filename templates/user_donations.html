@@ -31,7 +31,7 @@
                             <p class="text-gray-900 whitespace-no-wrap">#{{ donation.donation_id }}</p>
                         </td>
                         <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
-                            <p class="text-gray-900 whitespace-no-wrap">{{ donation.donation_date.strftime('%B %d, %Y') }}</p>
+                            <p class="text-gray-900 whitespace-no-wrap">{{ donation.donation_date.strftime('%B %d, %Y') if donation.donation_date else 'N/A' }}</p>
                         </td>
                         <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
                             <p class="text-gray-900 whitespace-no-wrap">{{ donation.quantity }}</p>

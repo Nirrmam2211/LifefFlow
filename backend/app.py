@@ -64,16 +64,18 @@ def query_db(query, args=(), one=False):
         conn.close()
 
 
-
-
 # --- Authentication Routes ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        role = request.form.get('role', 'user')
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        role = 'user'
         
+        if not username or not password:
+            flash('Username and password are required.', 'danger')
+            return redirect(url_for('register'))
+
         user_exists = query_db('SELECT * FROM User WHERE username = %s', [username], one=True)
         if user_exists:
             flash('Username already exists.', 'danger')

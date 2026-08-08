@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { font-family: 'Inter', sans-serif; }
         @keyframes heartbeat {
@@ -26,12 +27,12 @@
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex justify-between h-16 items-center">
                     <div class="flex items-center space-x-6">
-                        <div class="flex items-center text-red-700 font-bold text-xl">
+                        <a href="{% if session.get('user') %}{% if session.get('role') in ['admin', 'staff'] %}{{ url_for('dashboard') }}{% else %}{{ url_for('user_dashboard') }}{% endif %}{% else %}{{ url_for('login') }}{% endif %}" class="flex items-center text-red-700 font-bold text-xl hover:text-red-800">
                             <svg class="w-6 h-6 mr-2 heart-icon" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path>
                             </svg>
                             LifeFlow
-                        </div>
+                        </a>
                         {% if session.get('user') %}
                         <nav class="hidden sm:flex sm:space-x-4">
                             {% set user_role = session.get('role') %}
