@@ -18,15 +18,21 @@ app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-super-secr
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
 
 # --- Database Configuration ---
-DB_HOST = os.environ.get('DB_HOST', os.environ.get('MYSQLHOST', 'localhost'))
-DB_USER = os.environ.get('DB_USER', os.environ.get('MYSQLUSER', 'root'))
-DB_PASSWORD = os.environ.get('DB_PASSWORD', os.environ.get('MYSQLPASSWORD', ''))
-DB_NAME = os.environ.get('DB_NAME', os.environ.get('MYSQLDATABASE', 'blood_donation'))
-DB_PORT = int(os.environ.get('DB_PORT', os.environ.get('MYSQLPORT', 3306)))
+DB_HOST = os.environ.get('DB_HOST', os.environ.get('MYSQLHOST', os.environ.get('MYSQL_HOST', 'localhost')))
+DB_USER = os.environ.get('DB_USER', os.environ.get('MYSQLUSER', os.environ.get('MYSQL_USER', 'root')))
+DB_PASSWORD = os.environ.get('DB_PASSWORD', os.environ.get('MYSQLPASSWORD', os.environ.get('MYSQL_PASSWORD', '')))
+DB_NAME = os.environ.get('DB_NAME', os.environ.get('MYSQLDATABASE', os.environ.get('MYSQL_DATABASE', 'blood_donation')))
+DB_PORT = int(os.environ.get('DB_PORT', os.environ.get('MYSQLPORT', os.environ.get('MYSQL_PORT', 3306))))
 
 # Check for full MySQL connection URL (common in Railway/Heroku/cloud hosting)
-db_url = os.environ.get('MYSQL_URL') or os.environ.get('DATABASE_URL') or os.environ.get('MYSQL_PRIVATE_URL')
-if db_url and db_url.startswith('mysql'):
+db_url = (
+    os.environ.get('MYSQL_URL') or 
+    os.environ.get('DATABASE_URL') or 
+    os.environ.get('MYSQL_PRIVATE_URL') or
+    os.environ.get('DATABASE_PUBLIC_URL') or
+    os.environ.get('MYSQL_PUBLIC_URL')
+)
+if db_url and 'mysql' in db_url:
     try:
         parsed = urlparse(db_url)
         if parsed.hostname: DB_HOST = parsed.hostname
@@ -50,7 +56,7 @@ def get_db_connection():
         )
         return conn
     except mysql.connector.Error as err:
-        print(f"DATABASE CONNECTION ERROR: {err}")
+        print(f"DATABASE CONNECTION ERROR (host={DB_HOST}, port={DB_PORT}, user={DB_USER}, db={DB_NAME}): {err}")
         return None
 
 def init_db():
