@@ -26,59 +26,74 @@ def _first_non_empty(*values, default=None):
             return value
     return default
 
+def _clean_str(val, default=""):
+    if val is None:
+        return default
+    s = str(val).strip()
+    return s if s else default
 
+def _clean_port(val, default=3306):
+    if val is None:
+        return default
+    try:
+        s = str(val).strip()
+        return int(s) if s else default
+    except (ValueError, TypeError):
+        return default
+
+# --- Database Configuration ---
 def get_db_config():
     """Dynamically parses and returns database connection parameters."""
     db_url = (
-        os.environ.get('MYSQL_URL') or 
-        os.environ.get('DATABASE_URL') or 
-        os.environ.get('MYSQL_PRIVATE_URL') or
-        os.environ.get('DATABASE_PUBLIC_URL') or
-        os.environ.get('MYSQL_PUBLIC_URL')
+        _clean_str(os.environ.get('MYSQL_URL')) or 
+        _clean_str(os.environ.get('DATABASE_URL')) or 
+        _clean_str(os.environ.get('MYSQL_PRIVATE_URL')) or
+        _clean_str(os.environ.get('DATABASE_PUBLIC_URL')) or
+        _clean_str(os.environ.get('MYSQL_PUBLIC_URL'))
     )
     
-    host = _first_non_empty(
-        os.environ.get('DB_HOST'),
-        os.environ.get('MYSQLHOST'),
-        os.environ.get('MYSQL_HOST'),
-        default='localhost'
+    host = (
+        _clean_str(os.environ.get('DB_HOST')) or 
+        _clean_str(os.environ.get('MYSQLHOST')) or 
+        _clean_str(os.environ.get('MYSQL_HOST')) or 
+        'localhost'
     )
-    port_value = _first_non_empty(
-        os.environ.get('DB_PORT'),
-        os.environ.get('MYSQLPORT'),
-        os.environ.get('MYSQL_PORT'),
-        default=3306
+    
+    port_val = (
+        _clean_str(os.environ.get('DB_PORT')) or 
+        _clean_str(os.environ.get('MYSQLPORT')) or 
+        _clean_str(os.environ.get('MYSQL_PORT')) or 
+        '3306'
     )
-    try:
-        port = int(port_value)
-    except (TypeError, ValueError):
-        port = 3306
-    user = _first_non_empty(
-        os.environ.get('DB_USER'),
-        os.environ.get('MYSQLUSER'),
-        os.environ.get('MYSQL_USER'),
-        default='root'
+    port = _clean_port(port_val, 3306)
+    
+    user = (
+        _clean_str(os.environ.get('DB_USER')) or 
+        _clean_str(os.environ.get('MYSQLUSER')) or 
+        _clean_str(os.environ.get('MYSQL_USER')) or 
+        'root'
     )
-    password = _first_non_empty(
-        os.environ.get('DB_PASSWORD'),
-        os.environ.get('MYSQLPASSWORD'),
-        os.environ.get('MYSQL_PASSWORD'),
-        default=''
+    
+    password = (
+        os.environ.get('DB_PASSWORD') if os.environ.get('DB_PASSWORD') is not None else
+        os.environ.get('MYSQLPASSWORD') if os.environ.get('MYSQLPASSWORD') is not None else
+        os.environ.get('MYSQL_PASSWORD', '')
     )
-    database = _first_non_empty(
-        os.environ.get('DB_NAME'),
-        os.environ.get('MYSQLDATABASE'),
-        os.environ.get('MYSQL_DATABASE'),
-        default='blood_donation'
+    
+    database = (
+        _clean_str(os.environ.get('DB_NAME')) or 
+        _clean_str(os.environ.get('MYSQLDATABASE')) or 
+        _clean_str(os.environ.get('MYSQL_DATABASE')) or 
+        'blood_donation'
     )
 
     if db_url and 'mysql' in db_url:
         try:
             parsed = urlparse(db_url)
             if parsed.hostname: host = parsed.hostname
-            if parsed.port: port = int(parsed.port)
+            if parsed.port: port = _clean_port(parsed.port, port)
             if parsed.username: user = parsed.username
-            if parsed.password: password = parsed.password
+            if parsed.password is not None: password = parsed.password
             if parsed.path and len(parsed.path) > 1:
                 database = parsed.path.lstrip('/')
         except Exception as e:
