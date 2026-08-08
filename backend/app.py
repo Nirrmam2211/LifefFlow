@@ -18,53 +18,93 @@ app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-super-secr
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
 
 # --- Database Configuration ---
-DB_HOST = os.environ.get('DB_HOST', os.environ.get('MYSQLHOST', os.environ.get('MYSQL_HOST', 'localhost')))
-DB_USER = os.environ.get('DB_USER', os.environ.get('MYSQLUSER', os.environ.get('MYSQL_USER', 'root')))
-DB_PASSWORD = os.environ.get('DB_PASSWORD', os.environ.get('MYSQLPASSWORD', os.environ.get('MYSQL_PASSWORD', '')))
-DB_NAME = os.environ.get('DB_NAME', os.environ.get('MYSQLDATABASE', os.environ.get('MYSQL_DATABASE', 'blood_donation')))
-DB_PORT = int(os.environ.get('DB_PORT', os.environ.get('MYSQLPORT', os.environ.get('MYSQL_PORT', 3306))))
+def get_db_config():
+    """Dynamically parses and returns database connection parameters."""
+    db_url = (
+        os.environ.get('MYSQL_URL') or 
+        os.environ.get('DATABASE_URL') or 
+        os.environ.get('MYSQL_PRIVATE_URL') or
+        os.environ.get('DATABASE_PUBLIC_URL') or
+        os.environ.get('MYSQL_PUBLIC_URL')
+    )
+    
+    host = os.environ.get('DB_HOST', os.environ.get('MYSQLHOST', os.environ.get('MYSQL_HOST', 'localhost')))
+    port = int(os.environ.get('DB_PORT', os.environ.get('MYSQLPORT', os.environ.get('MYSQL_PORT', 3306))))
+    user = os.environ.get('DB_USER', os.environ.get('MYSQLUSER', os.environ.get('MYSQL_USER', 'root')))
+    password = os.environ.get('DB_PASSWORD', os.environ.get('MYSQLPASSWORD', os.environ.get('MYSQL_PASSWORD', '')))
+    database = os.environ.get('DB_NAME', os.environ.get('MYSQLDATABASE', os.environ.get('MYSQL_DATABASE', 'blood_donation')))
 
-# Check for full MySQL connection URL (common in Railway/Heroku/cloud hosting)
-db_url = (
-    os.environ.get('MYSQL_URL') or 
-    os.environ.get('DATABASE_URL') or 
-    os.environ.get('MYSQL_PRIVATE_URL') or
-    os.environ.get('DATABASE_PUBLIC_URL') or
-    os.environ.get('MYSQL_PUBLIC_URL')
-)
-if db_url and 'mysql' in db_url:
-    try:
-        parsed = urlparse(db_url)
-        if parsed.hostname: DB_HOST = parsed.hostname
-        if parsed.port: DB_PORT = int(parsed.port)
-        if parsed.username: DB_USER = parsed.username
-        if parsed.password: DB_PASSWORD = parsed.password
-        if parsed.path and len(parsed.path) > 1:
-            DB_NAME = parsed.path.lstrip('/')
-    except Exception as e:
-        print(f"Error parsing database URL: {e}")
+    if db_url and 'mysql' in db_url:
+        try:
+            parsed = urlparse(db_url)
+            if parsed.hostname: host = parsed.hostname
+            if parsed.port: port = int(parsed.port)
+            if parsed.username: user = parsed.username
+            if parsed.password: password = parsed.password
+            if parsed.path and len(parsed.path) > 1:
+                database = parsed.path.lstrip('/')
+        except Exception as e:
+            print(f"Error parsing database URL: {e}")
+
+    return {
+        'host': host,
+        'port': port,
+        'user': user,
+        'password': password,
+        'database': database
+    }
 
 def get_db_connection():
     """Establishes a connection to the MySQL database."""
+    config = get_db_config()
     try:
         conn = mysql.connector.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME
+            host=config['host'],
+            port=config['port'],
+            user=config['user'],
+            password=config['password'],
+            database=config['database'],
+            connect_timeout=10
         )
         return conn
     except mysql.connector.Error as err:
-        print(f"DATABASE CONNECTION ERROR (host={DB_HOST}, port={DB_PORT}, user={DB_USER}, db={DB_NAME}): {err}")
+        # If database doesn't exist yet, try creating it
+        if err.errno == 1049: # Unknown database
+            try:
+                temp_conn = mysql.connector.connect(
+                    host=config['host'],
+                    port=config['port'],
+                    user=config['user'],
+                    password=config['password'],
+                    connect_timeout=10
+                )
+                cur = temp_conn.cursor()
+                cur.execute(f"CREATE DATABASE IF NOT EXISTS `{config['database']}`")
+                cur.close()
+                temp_conn.close()
+                return mysql.connector.connect(
+                    host=config['host'],
+                    port=config['port'],
+                    user=config['user'],
+                    password=config['password'],
+                    database=config['database'],
+                    connect_timeout=10
+                )
+            except Exception as create_err:
+                print(f"Failed to auto-create database {config['database']}: {create_err}")
+                return None
+        print(f"DATABASE CONNECTION ERROR (host={config['host']}, port={config['port']}, user={config['user']}, db={config['database']}): {err}")
         return None
+
+_db_initialized = False
 
 def init_db():
     """Initializes the database schema if tables do not exist."""
+    global _db_initialized
     conn = get_db_connection()
     if conn is None:
         print("WARNING: Could not connect to database for initialization.")
-        return
+        return False
     cursor = conn.cursor()
     try:
         # Create Blood_Bank
@@ -215,9 +255,12 @@ def init_db():
             """)
             conn.commit()
 
+        _db_initialized = True
         print("Database schema initialized successfully.")
+        return True
     except Exception as err:
         print(f"Database initialization error: {err}")
+        return False
     finally:
         cursor.close()
         conn.close()
@@ -227,6 +270,40 @@ try:
     init_db()
 except Exception as e:
     print(f"Failed to auto-initialize database on startup: {e}")
+
+@app.before_request
+def ensure_db_ready():
+    global _db_initialized
+    if not _db_initialized and not request.path.startswith('/static'):
+        init_db()
+
+@app.route('/api/db-status')
+def db_status():
+    config = get_db_config()
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to connect to MySQL database.',
+            'configured_host': config['host'],
+            'configured_port': config['port'],
+            'configured_user': config['user'],
+            'configured_database': config['database']
+        }), 500
+    try:
+        cur = conn.cursor()
+        cur.execute("SHOW TABLES")
+        tables = [r[0] for r in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return jsonify({
+            'status': 'connected',
+            'database': config['database'],
+            'host': config['host'],
+            'tables': tables
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # --- Helper Functions ---
 def query_db(query, args=(), one=False):
