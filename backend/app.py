@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta, date
+from urllib.parse import urlparse
 from flask import Flask, jsonify, render_template, request, redirect, url_for, flash, session, make_response
 import mysql.connector
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,12 +18,25 @@ app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-super-secr
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
 
 # --- Database Configuration ---
-# Reads from environment variables (see .env / .env.example). Falls back to local defaults.
 DB_HOST = os.environ.get('DB_HOST', os.environ.get('MYSQLHOST', 'localhost'))
 DB_USER = os.environ.get('DB_USER', os.environ.get('MYSQLUSER', 'root'))
 DB_PASSWORD = os.environ.get('DB_PASSWORD', os.environ.get('MYSQLPASSWORD', ''))
 DB_NAME = os.environ.get('DB_NAME', os.environ.get('MYSQLDATABASE', 'blood_donation'))
 DB_PORT = int(os.environ.get('DB_PORT', os.environ.get('MYSQLPORT', 3306)))
+
+# Check for full MySQL connection URL (common in Railway/Heroku/cloud hosting)
+db_url = os.environ.get('MYSQL_URL') or os.environ.get('DATABASE_URL') or os.environ.get('MYSQL_PRIVATE_URL')
+if db_url and db_url.startswith('mysql'):
+    try:
+        parsed = urlparse(db_url)
+        if parsed.hostname: DB_HOST = parsed.hostname
+        if parsed.port: DB_PORT = int(parsed.port)
+        if parsed.username: DB_USER = parsed.username
+        if parsed.password: DB_PASSWORD = parsed.password
+        if parsed.path and len(parsed.path) > 1:
+            DB_NAME = parsed.path.lstrip('/')
+    except Exception as e:
+        print(f"Error parsing database URL: {e}")
 
 def get_db_connection():
     """Establishes a connection to the MySQL database."""
@@ -39,6 +53,175 @@ def get_db_connection():
         print(f"DATABASE CONNECTION ERROR: {err}")
         return None
 
+def init_db():
+    """Initializes the database schema if tables do not exist."""
+    conn = get_db_connection()
+    if conn is None:
+        print("WARNING: Could not connect to database for initialization.")
+        return
+    cursor = conn.cursor()
+    try:
+        # Create Blood_Bank
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Blood_Bank (
+                bank_id INT PRIMARY KEY AUTO_INCREMENT,
+                name VARCHAR(100),
+                address VARCHAR(200),
+                contact VARCHAR(100)
+            )
+        """)
+        # Create Donor
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Donor (
+                donor_id INT PRIMARY KEY AUTO_INCREMENT,
+                name VARCHAR(100),
+                age INT,
+                gender CHAR(1),
+                blood_group VARCHAR(5),
+                contact VARCHAR(20),
+                address VARCHAR(255),
+                email VARCHAR(100) UNIQUE,
+                last_donation_date DATE,
+                eligibility_status VARCHAR(30)
+            )
+        """)
+        # Create Recipient
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Recipient (
+                recipient_id INT PRIMARY KEY AUTO_INCREMENT,
+                name VARCHAR(100),
+                age INT,
+                gender CHAR(1),
+                blood_group_needed VARCHAR(5),
+                contact VARCHAR(20),
+                address VARCHAR(255),
+                medical_notes VARCHAR(255),
+                registration_date DATE
+            )
+        """)
+        # Create Blood_Stock
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Blood_Stock (
+                unit_id INT PRIMARY KEY AUTO_INCREMENT,
+                blood_group VARCHAR(5),
+                quantity INT,
+                collection_date DATE,
+                expiry_date DATE,
+                storage_location VARCHAR(50),
+                bank_id INT,
+                FOREIGN KEY (bank_id) REFERENCES Blood_Bank(bank_id) ON DELETE SET NULL
+            )
+        """)
+        # Create Donation
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Donation (
+                donation_id INT PRIMARY KEY AUTO_INCREMENT,
+                donor_id INT,
+                unit_id INT,
+                donation_date DATE,
+                quantity INT,
+                FOREIGN KEY (donor_id) REFERENCES Donor(donor_id) ON DELETE SET NULL,
+                FOREIGN KEY (unit_id) REFERENCES Blood_Stock(unit_id) ON DELETE SET NULL
+            )
+        """)
+        # Create Blood_Issue
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Blood_Issue (
+                issue_id INT PRIMARY KEY AUTO_INCREMENT,
+                recipient_id INT,
+                unit_id INT,
+                issue_date DATE,
+                hospital VARCHAR(100),
+                quantity INT,
+                FOREIGN KEY (recipient_id) REFERENCES Recipient(recipient_id) ON DELETE SET NULL,
+                FOREIGN KEY (unit_id) REFERENCES Blood_Stock(unit_id) ON DELETE SET NULL
+            )
+        """)
+        # Create User
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS User (
+                user_id INT PRIMARY KEY AUTO_INCREMENT,
+                username VARCHAR(50) UNIQUE,
+                password_hash VARCHAR(255),
+                role ENUM('admin', 'staff', 'user') DEFAULT 'user',
+                created_at DATE,
+                donor_id INT,
+                FOREIGN KEY (donor_id) REFERENCES Donor(donor_id) ON DELETE SET NULL
+            )
+        """)
+        # Create Blood_Request
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Blood_Request (
+                request_id INT PRIMARY KEY AUTO_INCREMENT,
+                user_id INT,
+                blood_group VARCHAR(5) NOT NULL,
+                units_needed INT NOT NULL,
+                hospital VARCHAR(255) NOT NULL,
+                urgency_level VARCHAR(50) NOT NULL,
+                contact_info VARCHAR(50) NOT NULL,
+                status VARCHAR(30) DEFAULT 'Pending',
+                request_date DATE,
+                FOREIGN KEY (user_id) REFERENCES User(user_id) ON DELETE CASCADE
+            )
+        """)
+        # Create Monthly_Donation_Report
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Monthly_Donation_Report (
+                report_id INT PRIMARY KEY AUTO_INCREMENT,
+                year INT,
+                month INT,
+                total_donations INT,
+                total_quantity INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY year_month_unique (year, month)
+            )
+        """)
+        # Create Yearly_Donation_Report
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Yearly_Donation_Report (
+                report_id INT PRIMARY KEY AUTO_INCREMENT,
+                year INT UNIQUE,
+                total_donations INT,
+                total_quantity INT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        # Seed sample blood banks and admin user if empty
+        cursor.execute("SELECT COUNT(*) FROM User WHERE role = 'admin'")
+        if cursor.fetchone()[0] == 0:
+            admin_pwd = generate_password_hash("admin123")
+            cursor.execute(
+                "INSERT INTO User (username, password_hash, role, created_at) VALUES (%s, %s, 'admin', %s)",
+                ("admin", admin_pwd, date.today())
+            )
+            conn.commit()
+            print("Default admin account created: username='admin', password='admin123'")
+
+        cursor.execute("SELECT COUNT(*) FROM Blood_Bank")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO Blood_Bank (name, address, contact) VALUES
+                ('Central Blood Bank', '123 Main St, City', '123-456-7890'),
+                ('Westside Blood Bank', '456 West St, City', '987-654-3210'),
+                ('Eastside Blood Center', '789 East Blvd, City', '321-654-0987')
+            """)
+            conn.commit()
+
+        print("Database schema initialized successfully.")
+    except Exception as err:
+        print(f"Database initialization error: {err}")
+    finally:
+        cursor.close()
+        conn.close()
+
+# Auto-initialize database schema on startup
+try:
+    init_db()
+except Exception as e:
+    print(f"Failed to auto-initialize database on startup: {e}")
+
 # --- Helper Functions ---
 def query_db(query, args=(), one=False):
     """Executes a database query."""
@@ -54,7 +237,7 @@ def query_db(query, args=(), one=False):
         # For INSERT, UPDATE, DELETE, commit changes
         else:
             conn.commit()
-            return cursor.lastrowid
+            return cursor.lastrowid if cursor.lastrowid else cursor.rowcount
     except mysql.connector.Error as err:
         print(f"DATABASE QUERY ERROR: {err}")
         conn.rollback() # Roll back in case of error
@@ -82,8 +265,12 @@ def register():
             return redirect(url_for('register'))
 
         hashed_password = generate_password_hash(password)
-        query_db('INSERT INTO User (username, password_hash, role, created_at, donor_id) VALUES (%s, %s, %s, %s, NULL)',
+        res = query_db('INSERT INTO User (username, password_hash, role, created_at, donor_id) VALUES (%s, %s, %s, %s, NULL)',
                  (username, hashed_password, role, date.today()))
+
+        if res is None:
+            flash('Database error: Unable to create account. Please check your database connection.', 'danger')
+            return redirect(url_for('register'))
 
         flash('Registration successful! Please log in.', 'success')
         return redirect(url_for('login'))
@@ -93,8 +280,13 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        if not username or not password:
+            flash('Please enter both username and password.', 'danger')
+            return redirect(url_for('login'))
+
         user = query_db('SELECT * FROM User WHERE username = %s', [username], one=True)
 
         if user and check_password_hash(user['password_hash'], password):
