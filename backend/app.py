@@ -403,7 +403,7 @@ def register():
                  (username, hashed_password, role, date.today()))
 
         if res is None:
-            if app.config["DEBUG_MODE"] and LAST_DB_ERROR:
+            if LAST_DB_ERROR:
                 flash(f'Database error: {LAST_DB_ERROR}', 'danger')
             else:
                 flash('Database error: Unable to create account. Please check your database connection.', 'danger')
