@@ -19,6 +19,14 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
 app.config["DEBUG_MODE"] = os.environ.get("FLASK_DEBUG", "0") == "1"
 
 # --- Database Configuration ---
+def _first_non_empty(*values, default=None):
+    """Return the first value that is not None and not an empty string."""
+    for value in values:
+        if value is not None and value != '':
+            return value
+    return default
+
+
 def get_db_config():
     """Dynamically parses and returns database connection parameters."""
     db_url = (
@@ -29,11 +37,40 @@ def get_db_config():
         os.environ.get('MYSQL_PUBLIC_URL')
     )
     
-    host = os.environ.get('DB_HOST', os.environ.get('MYSQLHOST', os.environ.get('MYSQL_HOST', 'localhost')))
-    port = int(os.environ.get('DB_PORT', os.environ.get('MYSQLPORT', os.environ.get('MYSQL_PORT', 3306))))
-    user = os.environ.get('DB_USER', os.environ.get('MYSQLUSER', os.environ.get('MYSQL_USER', 'root')))
-    password = os.environ.get('DB_PASSWORD', os.environ.get('MYSQLPASSWORD', os.environ.get('MYSQL_PASSWORD', '')))
-    database = os.environ.get('DB_NAME', os.environ.get('MYSQLDATABASE', os.environ.get('MYSQL_DATABASE', 'blood_donation')))
+    host = _first_non_empty(
+        os.environ.get('DB_HOST'),
+        os.environ.get('MYSQLHOST'),
+        os.environ.get('MYSQL_HOST'),
+        default='localhost'
+    )
+    port_value = _first_non_empty(
+        os.environ.get('DB_PORT'),
+        os.environ.get('MYSQLPORT'),
+        os.environ.get('MYSQL_PORT'),
+        default=3306
+    )
+    try:
+        port = int(port_value)
+    except (TypeError, ValueError):
+        port = 3306
+    user = _first_non_empty(
+        os.environ.get('DB_USER'),
+        os.environ.get('MYSQLUSER'),
+        os.environ.get('MYSQL_USER'),
+        default='root'
+    )
+    password = _first_non_empty(
+        os.environ.get('DB_PASSWORD'),
+        os.environ.get('MYSQLPASSWORD'),
+        os.environ.get('MYSQL_PASSWORD'),
+        default=''
+    )
+    database = _first_non_empty(
+        os.environ.get('DB_NAME'),
+        os.environ.get('MYSQLDATABASE'),
+        os.environ.get('MYSQL_DATABASE'),
+        default='blood_donation'
+    )
 
     if db_url and 'mysql' in db_url:
         try:
