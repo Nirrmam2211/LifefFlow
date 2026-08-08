@@ -18,16 +18,18 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
 
 # --- Database Configuration ---
 # Reads from environment variables (see .env / .env.example). Falls back to local defaults.
-DB_HOST = os.environ.get('DB_HOST', 'localhost')
-DB_USER = os.environ.get('DB_USER', 'root')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
-DB_NAME = os.environ.get('DB_NAME', 'blood_donation')
+DB_HOST = os.environ.get('DB_HOST', os.environ.get('MYSQLHOST', 'localhost'))
+DB_USER = os.environ.get('DB_USER', os.environ.get('MYSQLUSER', 'root'))
+DB_PASSWORD = os.environ.get('DB_PASSWORD', os.environ.get('MYSQLPASSWORD', ''))
+DB_NAME = os.environ.get('DB_NAME', os.environ.get('MYSQLDATABASE', 'blood_donation'))
+DB_PORT = int(os.environ.get('DB_PORT', os.environ.get('MYSQLPORT', 3306)))
 
 def get_db_connection():
     """Establishes a connection to the MySQL database."""
     try:
         conn = mysql.connector.connect(
             host=DB_HOST,
+            port=DB_PORT,
             user=DB_USER,
             password=DB_PASSWORD,
             database=DB_NAME
@@ -566,4 +568,6 @@ def profile():
 
 # --- Main Execution ---
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', '1') == '1'
+    app.run(host='0.0.0.0', port=port, debug=debug)
