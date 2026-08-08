@@ -29,6 +29,26 @@ def _first_non_empty(*values, default=None):
 
 def get_db_config():
     """Dynamically parses and returns database connection parameters."""
+    # --- DEBUG: dump the raw environment variables we care about ---
+    _debug_env_vars = [
+        'MYSQL_URL', 'DATABASE_URL', 'MYSQL_PRIVATE_URL', 'DATABASE_PUBLIC_URL',
+        'MYSQL_PUBLIC_URL', 'DB_HOST', 'MYSQLHOST', 'MYSQL_HOST', 'DB_PORT',
+        'MYSQLPORT', 'MYSQL_PORT', 'DB_USER', 'MYSQLUSER', 'MYSQL_USER',
+        'DB_PASSWORD', 'MYSQLPASSWORD', 'MYSQL_PASSWORD', 'DB_NAME',
+        'MYSQLDATABASE', 'MYSQL_DATABASE'
+    ]
+    print("=" * 60, flush=True)
+    print("[DB CONFIG DEBUG] Raw environment variables (before parsing):", flush=True)
+    for var_name in _debug_env_vars:
+        raw_value = os.environ.get(var_name)
+        if raw_value is not None and 'PASSWORD' in var_name:
+            display_value = f"<set, length={len(raw_value)}>"
+        elif raw_value is None:
+            display_value = "<NOT SET>"
+        else:
+            display_value = raw_value
+        print(f"[DB CONFIG DEBUG]   {var_name} = {display_value}", flush=True)
+
     db_url = (
         os.environ.get('MYSQL_URL') or 
         os.environ.get('DATABASE_URL') or 
@@ -36,7 +56,16 @@ def get_db_config():
         os.environ.get('DATABASE_PUBLIC_URL') or
         os.environ.get('MYSQL_PUBLIC_URL')
     )
-    
+    if db_url:
+        _which_url_var = next(
+            (name for name in ('MYSQL_URL', 'DATABASE_URL', 'MYSQL_PRIVATE_URL', 'DATABASE_PUBLIC_URL', 'MYSQL_PUBLIC_URL')
+             if os.environ.get(name)),
+            None
+        )
+        print(f"[DB CONFIG DEBUG] Using connection URL from {_which_url_var}", flush=True)
+    else:
+        print("[DB CONFIG DEBUG] No connection URL env var found (MYSQL_URL/DATABASE_URL/etc. all unset/empty)", flush=True)
+
     host = _first_non_empty(
         os.environ.get('DB_HOST'),
         os.environ.get('MYSQLHOST'),
@@ -72,9 +101,18 @@ def get_db_config():
         default='blood_donation'
     )
 
+    print(
+        f"[DB CONFIG DEBUG] After individual-var resolution (before URL override): "
+        f"host={host}, port={port}, user={user}, password={'<set>' if password else '<empty>'}, database={database}",
+        flush=True
+    )
+
     if db_url and 'mysql' in db_url:
         try:
             parsed = urlparse(db_url)
+            print(f"[DB CONFIG DEBUG] Parsing connection URL: scheme={parsed.scheme}, "
+                  f"hostname={parsed.hostname}, port={parsed.port}, username={parsed.username}, "
+                  f"password={'<set>' if parsed.password else '<empty>'}, path={parsed.path}", flush=True)
             if parsed.hostname: host = parsed.hostname
             if parsed.port: port = int(parsed.port)
             if parsed.username: user = parsed.username
@@ -82,7 +120,16 @@ def get_db_config():
             if parsed.path and len(parsed.path) > 1:
                 database = parsed.path.lstrip('/')
         except Exception as e:
-            print(f"Error parsing database URL: {e}")
+            print(f"[DB CONFIG DEBUG] Error parsing database URL: {e}", flush=True)
+    else:
+        print("[DB CONFIG DEBUG] Skipping URL parsing (no URL, or URL does not contain 'mysql')", flush=True)
+
+    print(
+        f"[DB CONFIG DEBUG] FINAL config -> host={host}, port={port}, user={user}, "
+        f"password={'<set>' if password else '<empty>'}, database={database}",
+        flush=True
+    )
+    print("=" * 60, flush=True)
 
     return {
         'host': host,
@@ -95,6 +142,12 @@ def get_db_config():
 def get_db_connection():
     """Establishes a connection to the MySQL database."""
     config = get_db_config()
+    print(
+        f"[DB CONNECT DEBUG] Attempting connection with host={config['host']}, "
+        f"port={config['port']}, user={config['user']}, database={config['database']}, "
+        f"password={'<set>' if config['password'] else '<empty>'}",
+        flush=True
+    )
     try:
         conn = mysql.connector.connect(
             host=config['host'],
@@ -104,8 +157,14 @@ def get_db_connection():
             database=config['database'],
             connect_timeout=10
         )
+        print(f"[DB CONNECT DEBUG] Successfully connected to {config['host']}:{config['port']}", flush=True)
         return conn
     except mysql.connector.Error as err:
+        print(
+            f"[DB CONNECT DEBUG] Connection failed with host={config['host']}, "
+            f"port={config['port']}, user={config['user']}, database={config['database']}: {err}",
+            flush=True
+        )
         # If database doesn't exist yet, try creating it
         if err.errno == 1049: # Unknown database
             try:
