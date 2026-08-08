@@ -16,6 +16,7 @@ app = Flask(__name__, template_folder='../templates', static_folder='../static')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-super-secret-key')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-super-secret-jwt-key')
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
+app.config["DEBUG_MODE"] = os.environ.get("FLASK_DEBUG", "0") == "1"
 
 # --- Database Configuration ---
 def get_db_config():
@@ -91,12 +92,24 @@ def get_db_connection():
                     connect_timeout=10
                 )
             except Exception as create_err:
-                print(f"Failed to auto-create database {config['database']}: {create_err}")
+                _record_db_error(
+                    f"Failed to auto-create database {config['database']}: {create_err}"
+                )
                 return None
-        print(f"DATABASE CONNECTION ERROR (host={config['host']}, port={config['port']}, user={config['user']}, db={config['database']}): {err}")
+        _record_db_error(
+            f"DATABASE CONNECTION ERROR (host={config['host']}, port={config['port']}, user={config['user']}, db={config['database']}): {err}"
+        )
         return None
 
 _db_initialized = False
+LAST_DB_ERROR = None
+
+
+def _record_db_error(message):
+    """Store and log the latest database error for troubleshooting."""
+    global LAST_DB_ERROR
+    LAST_DB_ERROR = message
+    app.logger.error(message)
 
 def init_db():
     """Initializes the database schema if tables do not exist."""
@@ -259,7 +272,7 @@ def init_db():
         print("Database schema initialized successfully.")
         return True
     except Exception as err:
-        print(f"Database initialization error: {err}")
+        _record_db_error(f"Database initialization error: {err}")
         return False
     finally:
         cursor.close()
@@ -285,6 +298,7 @@ def db_status():
         return jsonify({
             'status': 'error',
             'message': 'Failed to connect to MySQL database.',
+            'last_error': LAST_DB_ERROR,
             'configured_host': config['host'],
             'configured_port': config['port'],
             'configured_user': config['user'],
@@ -322,7 +336,7 @@ def query_db(query, args=(), one=False):
             conn.commit()
             return cursor.lastrowid if cursor.lastrowid else cursor.rowcount
     except mysql.connector.Error as err:
-        print(f"DATABASE QUERY ERROR: {err}")
+        _record_db_error(f"DATABASE QUERY ERROR: {err}")
         conn.rollback() # Roll back in case of error
         return None
     finally:
@@ -352,7 +366,10 @@ def register():
                  (username, hashed_password, role, date.today()))
 
         if res is None:
-            flash('Database error: Unable to create account. Please check your database connection.', 'danger')
+            if app.config["DEBUG_MODE"] and LAST_DB_ERROR:
+                flash(f'Database error: {LAST_DB_ERROR}', 'danger')
+            else:
+                flash('Database error: Unable to create account. Please check your database connection.', 'danger')
             return redirect(url_for('register'))
 
         flash('Registration successful! Please log in.', 'success')
