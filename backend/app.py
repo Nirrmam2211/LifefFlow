@@ -29,14 +29,43 @@ def _first_non_empty(*values, default=None):
 
 def get_db_config():
     """Dynamically parses and returns database connection parameters."""
+    # Prefer MYSQL_URL, provided by Railway's MySQL template, since
+    # reference variables (e.g. ${{MySQL.MYSQLHOST}}) may not resolve.
+    mysql_url = os.environ.get('MYSQL_URL')
+    print(f"[get_db_config] MYSQL_URL present: {bool(mysql_url)}")
+
     db_url = (
-        os.environ.get('MYSQL_URL') or 
+        mysql_url or
         os.environ.get('DATABASE_URL') or 
         os.environ.get('MYSQL_PRIVATE_URL') or
         os.environ.get('DATABASE_PUBLIC_URL') or
         os.environ.get('MYSQL_PUBLIC_URL')
     )
-    
+
+    if db_url and 'mysql' in db_url:
+        # Trust the URL entirely when present - parse it and return immediately,
+        # rather than treating it as a fallback/override for individual vars.
+        try:
+            parsed = urlparse(db_url)
+            config = {
+                'host': parsed.hostname or 'localhost',
+                'port': int(parsed.port) if parsed.port else 3306,
+                'user': parsed.username or 'root',
+                'password': parsed.password or '',
+                'database': parsed.path.lstrip('/') if parsed.path and len(parsed.path) > 1 else 'blood_donation'
+            }
+            print(
+                f"[get_db_config] Using MYSQL_URL -> host={config['host']} "
+                f"port={config['port']} database={config['database']}"
+            )
+            return config
+        except Exception as e:
+            print(f"Error parsing database URL: {e}")
+
+    # Fall back to individual variables only if MYSQL_URL (or another
+    # connection string) was not set.
+    print("[get_db_config] MYSQL_URL not set, falling back to individual variables")
+
     host = _first_non_empty(
         os.environ.get('DB_HOST'),
         os.environ.get('MYSQLHOST'),
@@ -72,17 +101,7 @@ def get_db_config():
         default='blood_donation'
     )
 
-    if db_url and 'mysql' in db_url:
-        try:
-            parsed = urlparse(db_url)
-            if parsed.hostname: host = parsed.hostname
-            if parsed.port: port = int(parsed.port)
-            if parsed.username: user = parsed.username
-            if parsed.password: password = parsed.password
-            if parsed.path and len(parsed.path) > 1:
-                database = parsed.path.lstrip('/')
-        except Exception as e:
-            print(f"Error parsing database URL: {e}")
+    print(f"[get_db_config] Using individual vars -> host={host} port={port} database={database}")
 
     return {
         'host': host,
